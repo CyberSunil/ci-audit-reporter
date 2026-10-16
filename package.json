@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "Minimal CI audit telemetry reporter",
   "main": "index.js",
+  "scripts": {
+    "postinstall": "node ./scripts/postinstall.js"
+  },
   "license": "MIT"
 }
