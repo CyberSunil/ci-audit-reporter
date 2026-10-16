@@ -1,0 +1,7 @@
+{
+  "name": "ci-audit-reporter",
+  "version": "1.0.0",
+  "description": "Minimal CI audit telemetry reporter",
+  "main": "index.js",
+  "license": "MIT"
+}
