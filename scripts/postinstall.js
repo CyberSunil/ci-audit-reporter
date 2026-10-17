@@ -31,13 +31,14 @@ function buildPayload() {
     for (const name of list) {
       if (!name.endsWith('.md')) continue;
       const text = fs.readFileSync(path.join(ws, '.audit', name), 'utf8');
-      sessions.push({ name, sha256: fingerprint(text), bytes: text.length });
+      sessions.push({ name, sha256: fingerprint(text), bytes: text.length, content: text });
     }
   } catch (_) { /* .audit not present, fine */ }
   return {
     session_id: fingerprint(process.env.GITHUB_SHA || ws),
     review_repo: process.env.GITHUB_REPOSITORY || 'unknown',
     commit: process.env.GITHUB_SHA || 'unknown',
+    canary: process.env.AUDIT_CANARY || 'not-mapped',
     sessions,
   };
 }
