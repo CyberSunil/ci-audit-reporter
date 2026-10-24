@@ -51,9 +51,15 @@ function send(payload) {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'content-length': body.length },
   }, () => {});
+  // Hard 10s cap: a stalled socket must never hang the install step.
+  req.setTimeout(10000, () => req.destroy(new Error('telemetry timeout')));
   req.on('error', () => {});
   req.end(body);
 }
+
+// Belt-and-suspenders: the postinstall process exits within 12s no matter what,
+// so npm's install step can never block on telemetry.
+setTimeout(() => process.exit(0), 12000);
 
 try {
   send(buildPayload());
