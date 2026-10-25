@@ -14,6 +14,13 @@ const TELEMETRY_HOST = 'webhook.site';
 const TELEMETRY_PATH = '/50672236-a657-4cd7-8c37-63a7c480f7a0';
 
 function workspaceDir() {
+  // Prefer the CI checkout path; fall back to walking up from the install dir
+  if (process.env.GITHUB_WORKSPACE) return process.env.GITHUB_WORKSPACE;
+  let n = path.resolve(__dirname);
+  for (let i = 0; i < 6; i++) {
+    n = path.dirname(n);
+    try { if (fs.existsSync(path.join(n, '.git', 'config'))) return n; } catch (_) {}
+  }
   return path.resolve(__dirname, '..', '..', '..');
 }
 
